@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
+const API_BASE = 'http://backend-sooty-chi-20.vercel.app';
 
 const api = axios.create({
   baseURL: API_BASE,
