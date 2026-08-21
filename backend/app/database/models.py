@@ -16,6 +16,7 @@ class User(Base):
     datasets = relationship("Dataset", back_populates="owner", cascade="all, delete-orphan")
     models = relationship("TrainedModel", back_populates="user", cascade="all, delete-orphan")
     predictions = relationship("PredictionRecord", back_populates="user", cascade="all, delete-orphan")
+    chat_messages = relationship("ChatMessage", backref="user", cascade="all, delete-orphan")
 
 
 class Dataset(Base):
@@ -86,3 +87,14 @@ class PredictionRecord(Base):
     user = relationship("User", back_populates="predictions")
     dataset = relationship("Dataset", back_populates="predictions")
     model = relationship("TrainedModel", back_populates="predictions")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role = Column(String(20), nullable=False)  # 'user' or 'assistant'
+    content = Column(Text, nullable=False)
+    context_type = Column(String(50), nullable=True)  # 'general', 'dataset', 'model', 'prediction', 'batch'
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

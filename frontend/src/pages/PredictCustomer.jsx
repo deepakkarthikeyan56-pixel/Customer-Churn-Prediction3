@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { modelService, predictionService, datasetService } from '../services/api';
 import { RiskGauge } from '../components/RiskGauge';
 import { StatusBadge } from '../components/StatusBadge';
@@ -24,13 +24,18 @@ import {
   Sliders,
   Activity,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Search,
+  PlusCircle,
+  UserSearch,
+  X
 } from 'lucide-react';
 
 export const PredictCustomer = ({ onNavigate }) => {
   const [activeModelMeta, setActiveModelMeta] = useState(null);
   const [activeDataset, setActiveDataset] = useState(null);
   const [sampleCustomers, setSampleCustomers] = useState([]);
+  const [allCustomers, setAllCustomers] = useState([]); // large pool for search
   const [formData, setFormData] = useState({});
   const [customerIdentifier, setCustomerIdentifier] = useState('');
   const [loading, setLoading] = useState(true);
@@ -39,6 +44,11 @@ export const PredictCustomer = ({ onNavigate }) => {
   const [error, setError] = useState('');
   const [autofillSource, setAutofillSource] = useState('');
   const [liveMode, setLiveMode] = useState(true);
+  // Tab: 'presets' | 'search' | 'manual'
+  const [activeTab, setActiveTab] = useState('presets');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [customerId, setCustomerId] = useState('');
+  const [manualFormData, setManualFormData] = useState({});
 
   // 4 Curated benchmark customer archetypes spanning the full 0% - 100% spectrum
   const defaultPresets = {
@@ -159,12 +169,13 @@ export const PredictCustomer = ({ onNavigate }) => {
       setActiveModelMeta(meta);
       setActiveDataset(ds);
 
-      // Load 6 diverse customer records from dataset preview
+      // Load customer records for preset samples + search pool
       if (ds?.id) {
         try {
-          const previewData = await datasetService.getDatasetPreview(ds.id, 20);
+          const previewData = await datasetService.getDatasetPreview(ds.id, 100);
           if (previewData?.rows?.length) {
             setSampleCustomers(previewData.rows.slice(0, 6));
+            setAllCustomers(previewData.rows); // full pool for search feature
           }
         } catch (e) {
           console.warn('Could not fetch dataset preview rows:', e);
@@ -282,6 +293,7 @@ export const PredictCustomer = ({ onNavigate }) => {
       executePredict(newForm);
     } catch (err) {
       setError('Failed to fetch sample from dataset.');
+      setActiveTab('presets');
     } finally {
       setLoading(false);
     }
@@ -348,138 +360,241 @@ export const PredictCustomer = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* 🌟 1-CLICK QUICK AUTOFILL & BENCHMARK CARDS */}
-      <div className="rounded-2xl border-2 border-indigo-500/50 bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-blue-950/80 p-5 backdrop-blur-2xl space-y-4 shadow-2xl">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-indigo-500/30 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400/20 text-amber-300 font-bold">
-              <Zap className="h-4 w-4" />
-            </span>
-            <div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                ⚡ 1-Click Quick Autofill Profiles & Real Dataset Records
-              </h3>
-              <p className="text-[11px] text-indigo-200">
-                Click any profile to immediately see how the probability gauge responds!
-              </p>
-            </div>
-          </div>
+      {/* 3-TAB PANEL: Quick Profiles | Search Customer | New Customer */}
+      <div className="rounded-2xl border-2 border-indigo-500/50 bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-blue-950/80 backdrop-blur-2xl shadow-2xl overflow-hidden">
+        {/* Tab Bar */}
+        <div className="flex border-b border-indigo-500/30 bg-slate-950/40">
+          {[
+            { key: 'presets', icon: <Zap className="h-3.5 w-3.5" />, label: 'Quick Profiles' },
+            { key: 'search',  icon: <Search className="h-3.5 w-3.5" />, label: 'Search Customer' },
+            { key: 'manual',  icon: <PlusCircle className="h-3.5 w-3.5" />, label: 'New Customer' },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-1.5 px-5 py-3 text-xs font-bold uppercase tracking-wider transition border-b-2 -mb-px ${
+                activeTab === tab.key
+                  ? 'border-indigo-400 text-indigo-300 bg-indigo-500/10'
+                  : 'border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/40'
+              }`}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
           {autofillSource && (
-            <span className="text-xs font-semibold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-3 py-1 rounded-full truncate max-w-md">
+            <span className="ml-auto self-center mr-4 text-[10px] font-semibold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 rounded-full truncate max-w-xs hidden sm:block">
               ✓ {autofillSource}
             </span>
           )}
         </div>
 
-        {/* 5 Prominent Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-          <button
-            type="button"
-            onClick={() => handleApplyPreset('extremeHighRisk')}
-            className="flex flex-col items-start p-3 rounded-xl border-2 border-rose-500/50 bg-rose-500/20 hover:bg-rose-500/35 hover:scale-[1.02] transition duration-200 text-left shadow-lg"
-          >
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-extrabold text-rose-300 uppercase flex items-center gap-1">
-                <TrendingUp className="h-3.5 w-3.5" /> High Risk Churner
-              </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/30 text-rose-200">
-                ~90% Churn
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300 mt-1">Month-to-month, $110/mo, 1 Mo Tenure</p>
-          </button>
+        <div className="p-5 space-y-4">
 
-          <button
-            type="button"
-            onClick={() => handleApplyPreset('loyalLowRisk')}
-            className="flex flex-col items-start p-3 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/20 hover:bg-emerald-500/35 hover:scale-[1.02] transition duration-200 text-left shadow-lg"
-          >
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-extrabold text-emerald-300 uppercase flex items-center gap-1">
-                <TrendingDown className="h-3.5 w-3.5" /> Loyal Customer
-              </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200">
-                ~8% Churn
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300 mt-1">2-Year Contract, 70 Mos, Full Support</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleApplyPreset('moderateRisk')}
-            className="flex flex-col items-start p-3 rounded-xl border-2 border-amber-500/50 bg-amber-500/20 hover:bg-amber-500/35 hover:scale-[1.02] transition duration-200 text-left shadow-lg"
-          >
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-extrabold text-amber-300 uppercase flex items-center gap-1">
-                <Sliders className="h-3.5 w-3.5" /> Moderate Risk
-              </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-200">
-                ~40% Churn
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300 mt-1">1-Year Contract, 24 Mos, $75/mo</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleRandomFromDataset('churn')}
-            className="flex flex-col items-start p-3 rounded-xl border-2 border-indigo-500/50 bg-indigo-500/20 hover:bg-indigo-500/35 hover:scale-[1.02] transition duration-200 text-left shadow-lg"
-          >
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-extrabold text-indigo-300 uppercase flex items-center gap-1">
-                <Shuffle className="h-3.5 w-3.5" /> Real Churner
-              </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-200">
-                From CSV
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300 mt-1">Random Actual Churned Row</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleRandomFromDataset('loyal')}
-            className="flex flex-col items-start p-3 rounded-xl border-2 border-blue-500/50 bg-blue-500/20 hover:bg-blue-500/35 hover:scale-[1.02] transition duration-200 text-left shadow-lg"
-          >
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-extrabold text-blue-300 uppercase flex items-center gap-1">
-                <Shuffle className="h-3.5 w-3.5" /> Real Retained
-              </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/30 text-blue-200">
-                From CSV
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300 mt-1">Random Actual Retained Row</p>
-          </button>
-        </div>
-
-        {/* Real Dataset Sample Table Picker (If dataset rows available) */}
-        {sampleCustomers.length > 0 && (
-          <div className="pt-2 border-t border-indigo-500/20">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-300 mb-2 block">
-              Or Click a Specific Real Customer from Active Dataset:
-            </span>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-              {sampleCustomers.map((c, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => handleLoadSampleRow(c, i)}
-                  className="flex flex-col p-2 rounded-lg border border-slate-700 bg-slate-950/70 hover:border-blue-400 hover:bg-slate-900 transition text-left"
-                >
-                  <span className="text-[11px] font-bold text-white truncate">{c.customerID || `Cust #${i + 1}`}</span>
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 mt-0.5">
-                    <span>{c.Contract?.slice(0, 8)}</span>
-                    <span className={c.Churn === 'Yes' ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
-                      {c.Churn || 'No'}
-                    </span>
+          {/* ── TAB 1: Quick Profiles ── */}
+          {activeTab === 'presets' && (
+            <>
+              <p className="text-[11px] text-indigo-200">Click any benchmark profile to instantly load it and see the live ML result.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                <button type="button" onClick={() => handleApplyPreset('extremeHighRisk')}
+                  className="flex flex-col items-start p-3 rounded-xl border-2 border-rose-500/50 bg-rose-500/20 hover:bg-rose-500/35 hover:scale-[1.02] transition duration-200 text-left shadow-lg">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-extrabold text-rose-300 uppercase flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5" /> High Risk</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/30 text-rose-200">~90%</span>
                   </div>
+                  <p className="text-[11px] text-slate-300 mt-1">Month-to-month, ₹110/mo, 1 Mo Tenure</p>
                 </button>
-              ))}
+                <button type="button" onClick={() => handleApplyPreset('loyalLowRisk')}
+                  className="flex flex-col items-start p-3 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/20 hover:bg-emerald-500/35 hover:scale-[1.02] transition duration-200 text-left shadow-lg">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-extrabold text-emerald-300 uppercase flex items-center gap-1"><TrendingDown className="h-3.5 w-3.5" /> Loyal</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200">~8%</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-1">2-Year Contract, 70 Mos, Full Support</p>
+                </button>
+                <button type="button" onClick={() => handleApplyPreset('moderateRisk')}
+                  className="flex flex-col items-start p-3 rounded-xl border-2 border-amber-500/50 bg-amber-500/20 hover:bg-amber-500/35 hover:scale-[1.02] transition duration-200 text-left shadow-lg">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-extrabold text-amber-300 uppercase flex items-center gap-1"><Sliders className="h-3.5 w-3.5" /> Moderate</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-200">~40%</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-1">1-Year Contract, 24 Mos, ₹75/mo</p>
+                </button>
+                <button type="button" onClick={() => handleRandomFromDataset('churn')}
+                  className="flex flex-col items-start p-3 rounded-xl border-2 border-indigo-500/50 bg-indigo-500/20 hover:bg-indigo-500/35 hover:scale-[1.02] transition duration-200 text-left shadow-lg">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-extrabold text-indigo-300 uppercase flex items-center gap-1"><Shuffle className="h-3.5 w-3.5" /> Real Churner</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-200">CSV</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-1">Random Actual Churned Row</p>
+                </button>
+                <button type="button" onClick={() => handleRandomFromDataset('loyal')}
+                  className="flex flex-col items-start p-3 rounded-xl border-2 border-blue-500/50 bg-blue-500/20 hover:bg-blue-500/35 hover:scale-[1.02] transition duration-200 text-left shadow-lg">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-extrabold text-blue-300 uppercase flex items-center gap-1"><Shuffle className="h-3.5 w-3.5" /> Real Retained</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/30 text-blue-200">CSV</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-1">Random Actual Retained Row</p>
+                </button>
+              </div>
+              {sampleCustomers.length > 0 && (
+                <div className="pt-2 border-t border-indigo-500/20">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-300 mb-2 block">Or pick a real dataset row:</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                    {sampleCustomers.map((c, i) => (
+                      <button key={i} type="button" onClick={() => handleLoadSampleRow(c, i)}
+                        className="flex flex-col p-2 rounded-lg border border-slate-700 bg-slate-950/70 hover:border-blue-400 hover:bg-slate-900 transition text-left">
+                        <span className="text-[11px] font-bold text-white truncate">{c.customerID || `Cust #${i + 1}`}</span>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 mt-0.5">
+                          <span>{c.Contract?.slice(0, 8)}</span>
+                          <span className={c.Churn === 'Yes' ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>{c.Churn || 'No'}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── TAB 2: Search Specific Customer by ID ── */}
+          {activeTab === 'search' && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Type Customer ID, contract type, charges… (e.g. 7590-VHVEG)"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-slate-700 bg-slate-950 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                <span className="text-[11px] text-slate-400 shrink-0">
+                  {allCustomers.length > 0 ? `${allCustomers.length} records loaded` : 'No dataset loaded'}
+                </span>
+              </div>
+
+              {allCustomers.length === 0 ? (
+                <div className="py-10 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
+                  <Search className="h-8 w-8 opacity-30" />
+                  <p>No dataset loaded. Please upload a dataset first.</p>
+                </div>
+              ) : (() => {
+                const q = searchQuery.trim().toLowerCase();
+                const filtered = q
+                  ? allCustomers.filter((c) => Object.values(c).some((v) => String(v).toLowerCase().includes(q)))
+                  : allCustomers;
+                return filtered.length === 0 ? (
+                  <p className="text-xs text-slate-500 py-6 text-center">No customers match "<strong>{searchQuery}</strong>".</p>
+                ) : (
+                  <>
+                    <p className="text-[10px] text-slate-500">{filtered.length} customer{filtered.length !== 1 ? 's' : ''} found{q ? ` for "${searchQuery}"` : ''}. Click any row to load & predict.</p>
+                    <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-800/80 scrollbar-thin">
+                      {filtered.slice(0, 50).map((c, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            handleLoadSampleRow(c, i);
+                            const cid = c.customerID || `CUST-SRCH-${i + 1}`;
+                            setCustomerIdentifier(cid);
+                            setAutofillSource(`Specific Customer: ${cid}`);
+                          }}
+                          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-indigo-500/10 transition group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800 group-hover:bg-indigo-500/30 transition text-[10px] font-bold text-slate-400 group-hover:text-indigo-300 shrink-0">
+                              {i + 1}
+                            </span>
+                            <div>
+                              <span className="text-xs font-bold text-white">{c.customerID || `Customer #${i + 1}`}</span>
+                              <div className="text-[10px] text-slate-400 flex gap-2 mt-0.5 flex-wrap">
+                                {c.Contract && <span>{c.Contract}</span>}
+                                {c.tenure !== undefined && <span>· {c.tenure} mo tenure</span>}
+                                {c.MonthlyCharges !== undefined && <span>· ₹{c.MonthlyCharges}/mo</span>}
+                                {c.InternetService && <span>· {c.InternetService}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              c.Churn === 'Yes'
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}>
+                              {c.Churn === 'Yes' ? 'Churned' : 'Retained'}
+                            </span>
+                            <ArrowRight className="h-3.5 w-3.5 text-slate-600 group-hover:text-indigo-400 transition" />
+                          </div>
+                        </button>
+                      ))}
+                      {filtered.length > 50 && (
+                        <p className="text-[10px] text-slate-500 text-center py-2 bg-slate-950/50">Showing top 50 of {filtered.length}. Refine your search to narrow results.</p>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
-          </div>
-        )}
+          )}
+
+          {/* ── TAB 3: New / Manual Customer Entry ── */}
+          {activeTab === 'manual' && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 p-3.5 rounded-xl border border-blue-500/30 bg-blue-500/10">
+                <PlusCircle className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-blue-200 leading-relaxed">
+                  Enter a brand-new customer's details. Give them a <strong>name or ID</strong>, then adjust the sliders &amp; dropdowns in the form below, and click <strong>Re-evaluate Churn Probability</strong>.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">Customer Name / ID <span className="text-blue-400">*</span></label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Rahul Sharma  or  CUST-2024-001"
+                    value={customerId}
+                    onChange={(e) => {
+                      setCustomerId(e.target.value);
+                      setCustomerIdentifier(e.target.value.trim() || 'CUST-MANUAL');
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-600 bg-slate-950 text-xs text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const blank = {};
+                    activeModelMeta?.feature_columns?.forEach((col) => {
+                      blank[col] = activeModelMeta.categorical_cols?.includes(col)
+                        ? (activeModelMeta.categorical_unique_values?.[col]?.[0] ?? '')
+                        : '';
+                    });
+                    setFormData(blank);
+                    setPredictionResult(null);
+                    setAutofillSource(`New Entry: ${customerId.trim() || 'Manual Customer'}`);
+                    setCustomerIdentifier(customerId.trim() || 'CUST-MANUAL');
+                  }}
+                  className="flex items-center gap-2 justify-center rounded-xl border border-slate-600 bg-slate-800 hover:bg-slate-700 px-4 py-2.5 text-xs font-semibold text-white transition"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Clear Form &amp; Start Fresh
+                </button>
+              </div>
+              <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/50">
+                <p className="text-[11px] text-slate-400">
+                  ↓ After setting the name above, use the <strong className="text-white">sliders and dropdowns</strong> in the form section below to fill in all the customer attributes, then click <strong className="text-blue-300">Re-evaluate Churn Probability</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+
+        </div>
       </div>
 
       {/* Main Form + Live Result Layout */}
@@ -523,9 +638,9 @@ export const PredictCustomer = ({ onNavigate }) => {
             {/* Slider 2: Monthly Charges */}
             <div className="space-y-2">
               <div className="flex justify-between items-center text-xs">
-                <span className="font-semibold text-slate-300">Monthly Bill / Charges ($):</span>
+                <span className="font-semibold text-slate-300">Monthly Bill / Charges (₹):</span>
                 <span className="font-bold text-white px-2.5 py-0.5 rounded-lg bg-emerald-600/30 border border-emerald-500/40 font-mono">
-                  ${parseFloat(formData.MonthlyCharges ?? 50).toFixed(2)} / month
+                  ₹{parseFloat(formData.MonthlyCharges ?? 50).toFixed(2)} / month
                 </span>
               </div>
               <input
@@ -538,9 +653,9 @@ export const PredictCustomer = ({ onNavigate }) => {
                 className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
               />
               <div className="flex justify-between text-[10px] text-slate-500">
-                <span>$18.00 (Low Bill)</span>
-                <span>$70.00</span>
-                <span>$125.00 (High Bill)</span>
+                <span>₹18.00 (Low Bill)</span>
+                <span>₹70.00</span>
+                <span>₹125.00 (High Bill)</span>
               </div>
             </div>
 
@@ -613,7 +728,7 @@ export const PredictCustomer = ({ onNavigate }) => {
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-xl space-y-4">
             <h3 className="text-sm font-bold text-white pb-2 border-b border-slate-800 flex items-center justify-between">
               <span>All Subscribed Services & Customer Details</span>
-              <span className="text-xs text-slate-400 font-normal">Calculated Total Charges: ${formData.TotalCharges || 0}</span>
+              <span className="text-xs text-slate-400 font-normal">Calculated Total Charges: ₹{formData.TotalCharges || 0}</span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">

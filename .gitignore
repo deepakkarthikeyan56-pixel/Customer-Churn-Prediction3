@@ -26,6 +26,10 @@ single_file_data/
 backend/uploads/*.csv
 !backend/sample_data/*.csv
 
+# Environment secrets
+.env
+backend/.env
+
 # OS
 .DS_Store
 Thumbs.db

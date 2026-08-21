@@ -1,9 +1,11 @@
 import os
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 
-load_dotenv()
+_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(_env_path)
 
 # MySQL Database configuration with fallback to SQLite for zero-hassle local execution
 MYSQL_USER = os.getenv("MYSQL_USER", "root")
